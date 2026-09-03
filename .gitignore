@@ -1,0 +1,46 @@
+# Python Environment
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment Variables (Secrets)
+.env
+.env.local
+
+# Geospatial & Satellite Data
+data/raw/*
+data/processed/*
+data/external/*
+data/samples/*
+!data/.gitkeep
+
+*.tif
+*.tiff
+*.nc
+*.gpkg
+*.shp
+*.shx
+*.dbf
+*.prj
+*.geojson
+
+# PyTorch & Machine Learning Weights
+*.pt
+*.pth
+*.onnx
+ml/checkpoints/*
+ml/logs/*
+runs/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Frontend / Next.js (Future-proofing)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
