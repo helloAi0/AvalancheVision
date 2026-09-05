@@ -1,18 +1,17 @@
 """FastAPI endpoints for querying and inspecting avalanche deposit detection polygons."""
 
 import logging
-from typing import Literal, Optional, Dict, Any
+from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Import your new high-performance async database dependency hook
 from backend.repositories.database import get_async_db
 from backend.services.detection_service import detection_service
 from backend.schemas.detection import (
-    DetectionGeoJSON,
     DetectionFeature,
-    DetectionSummaryStats,
     DetectionFilterParams,
+    DetectionGeoJSON,
+    DetectionSummaryStats,
 )
 from backend.services.export_service import export_service
 
@@ -51,7 +50,7 @@ async def get_detections_geojson(
     db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Streams standards-compliant WGS84 GeoJSON FeatureCollection of avalanche deposit polygons 
+    Streams standards-compliant WGS84 GeoJSON FeatureCollection of avalanche deposit polygons
     with rich zonal statistics out of the production spatial database.
     """
     filters = DetectionFilterParams(
@@ -64,9 +63,6 @@ async def get_detections_geojson(
         start_date=start_date,
         end_date=end_date,
     )
-    
-    # Non-blocking async execution layer using your real data service
-    # (Note: if your detection_service isn't fully async yet, remove the await keyword)
     return detection_service.get_geojson(filters=filters, db=db)
 
 
@@ -79,13 +75,13 @@ async def get_detection_summary_statistics(db: AsyncSession = Depends(get_async_
 @router.get("/{detection_id}", response_model=DetectionFeature, status_code=status.HTTP_200_OK)
 async def get_single_detection_detail(detection_id: str, db: AsyncSession = Depends(get_async_db)):
     """
-    Fetches detailed geometry, SAR backscatter drop, DEM terrain metrics, and 
+    Fetches detailed geometry, SAR backscatter drop, DEM terrain metrics, and
     ERA5 weather context for a specific detection.
     """
-    feature = await detection_service.get_detection_detail(detection_id, db=db)
+    feature = detection_service.get_detection_detail(detection_id, db=db)
     if not feature:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Detection with ID '{detection_id}' not found."
         )
     return feature
