@@ -2,6 +2,8 @@
 
 # AvalancheVision
 
+**[🔴 Live Demo / App Link](https://your-live-link-here.com)**
+
 **Physics-informed, multimodal satellite avalanche debris detection and mapping platform**
 
 Sentinel-1 C-band SAR · Copernicus DEM terrain metrics · ECMWF ERA5-Land weather context · 10-band U-Net segmentation
