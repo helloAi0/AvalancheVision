@@ -70,8 +70,8 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({ onSelectFeature })
   const rasterBounds = selectedRaster && selectedRaster.bounds_wgs84
     ? [[selectedRaster.bounds_wgs84[1], selectedRaster.bounds_wgs84[0]], [selectedRaster.bounds_wgs84[3], selectedRaster.bounds_wgs84[2]]] as [[number, number], [number, number]]
     : undefined;
-  const rasterUrl = selectedRaster && rasterBounds
-    ? api.getRasterWindowUrl(selectedRaster.raster_id, selectedRaster.bounds as [number, number, number, number])
+  const rasterUrl = selectedRaster && selectedRaster.bounds_wgs84
+    ? api.getRasterWindowUrl(selectedRaster.raster_id, selectedRaster.bounds_wgs84 as [number, number, number, number])
     : undefined;
 
   // Global Detections Fetcher
@@ -138,15 +138,19 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({ onSelectFeature })
   // 3D Transect Calculation
   const handleTransectCreated = async (coords: number[][]) => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/terrain/profile', {
+      const res = await fetch('/api/v1/terrain/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ coordinates: coords, samples: 100 }),
       });
+      if (!res.ok) {
+        throw new Error(`Transect profile failed with status ${res.status}`);
+      }
       const data = await res.json();
       setProfileData3D(data.profile || []);
     } catch (err) {
       console.error('Transect calculation failed:', err);
+      setProfileData3D([]);
     }
   };
 

@@ -19,11 +19,27 @@ export const Map3DWorkspace: React.FC<Map3DWorkspaceProps> = ({
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const hoverMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const drawingRef = useRef(false);
+  const transectPointsRef = useRef<number[][]>([]);
+  const onSelectFeatureRef = useRef(onSelectFeature);
+  const onTransectCreatedRef = useRef(onTransectCreated);
 
   const [pitch, setPitch] = useState<number>(60);
   const [bearing, setBearing] = useState<number>(-20);
   const [isDrawingTransect, setIsDrawingTransect] = useState<boolean>(false);
   const [transectPoints, setTransectPoints] = useState<number[][]>([]);
+
+  useEffect(() => {
+    drawingRef.current = isDrawingTransect;
+  }, [isDrawingTransect]);
+
+  useEffect(() => {
+    onSelectFeatureRef.current = onSelectFeature;
+  }, [onSelectFeature]);
+
+  useEffect(() => {
+    onTransectCreatedRef.current = onTransectCreated;
+  }, [onTransectCreated]);
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
@@ -121,31 +137,32 @@ export const Map3DWorkspace: React.FC<Map3DWorkspaceProps> = ({
     map.on('pitch', () => setPitch(Math.round(map.getPitch())));
 
     map.on('click', (e: any) => {
-      if (isDrawingTransect) {
+      if (drawingRef.current) {
         const newPoint = [e.lngLat.lng, e.lngLat.lat];
-        setTransectPoints((prev) => {
-          const updated = [...prev, newPoint];
-          const lineGeoJSON: any = {
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: updated },
-            properties: {},
-          };
-          (map.getSource('transect-line') as maplibregl.GeoJSONSource)?.setData(lineGeoJSON);
+        const updated = [...transectPointsRef.current, newPoint];
+        transectPointsRef.current = updated;
+        setTransectPoints(updated);
 
-          if (updated.length >= 2) {
-            onTransectCreated(updated);
-          }
-          return updated;
-        });
-      } else {
-        const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
-          [e.point.x - 5, e.point.y - 5],
-          [e.point.x + 5, e.point.y + 5],
-        ];
-        const features = map.queryRenderedFeatures(bbox, { layers: ['detections-fill'] });
-        if (features.length > 0) {
-          onSelectFeature(features[0].properties);
+        const lineGeoJSON: any = {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: updated },
+          properties: {},
+        };
+        (map.getSource('transect-line') as maplibregl.GeoJSONSource | undefined)?.setData(lineGeoJSON);
+
+        if (updated.length >= 2) {
+          onTransectCreatedRef.current(updated);
         }
+        return;
+      }
+
+      const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
+        [e.point.x - 5, e.point.y - 5],
+        [e.point.x + 5, e.point.y + 5],
+      ];
+      const features = map.queryRenderedFeatures(bbox, { layers: ['detections-fill'] });
+      if (features.length > 0) {
+        onSelectFeatureRef.current(features[0]);
       }
     });
 
@@ -158,8 +175,9 @@ export const Map3DWorkspace: React.FC<Map3DWorkspaceProps> = ({
   }, []);
 
   useEffect(() => {
-    if (mapRef.current && mapRef.current.isStyleLoaded() && geojson) {
-      (mapRef.current.getSource('avalanche-detections') as maplibregl.GeoJSONSource)?.setData(geojson);
+    const source = mapRef.current?.getSource('avalanche-detections') as maplibregl.GeoJSONSource | undefined;
+    if (source && geojson) {
+      source.setData(geojson);
     }
   }, [geojson]);
 
@@ -182,14 +200,21 @@ export const Map3DWorkspace: React.FC<Map3DWorkspaceProps> = ({
   }, [hoveredProfileCoord]);
 
   const clearTransect = () => {
+    transectPointsRef.current = [];
     setTransectPoints([]);
-    if (mapRef.current) {
-      (mapRef.current.getSource('transect-line') as maplibregl.GeoJSONSource)?.setData({
-        type: 'Feature',
-        geometry: { type: 'LineString', coordinates: [] },
-        properties: {},
-      });
-    }
+    (mapRef.current?.getSource('transect-line') as maplibregl.GeoJSONSource | undefined)?.setData({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: [] },
+      properties: {},
+    });
+  };
+
+  const toggleTransectDrawing = () => {
+    setIsDrawingTransect((current) => {
+      const next = !current;
+      if (next) clearTransect();
+      return next;
+    });
   };
 
   return (
@@ -203,16 +228,16 @@ export const Map3DWorkspace: React.FC<Map3DWorkspaceProps> = ({
       <div className="absolute top-3 left-3 bg-slate-900/90 backdrop-blur-md px-3 py-2 rounded border border-slate-700/60 text-xs font-mono text-slate-300 flex items-center gap-4 z-10 shadow-lg">
         <div className="flex items-center gap-1.5">
           <Mountain className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Pitch: <strong className="text-white">{pitch}°</strong></span>
+          <span>Pitch: <strong className="text-white">{pitch} deg</strong></span>
         </div>
         <div className="flex items-center gap-1.5">
           <Compass className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Bearing: <strong className="text-white">{bearing}°</strong></span>
+          <span>Bearing: <strong className="text-white">{bearing} deg</strong></span>
         </div>
       </div>
       <div className="absolute top-3 right-14 bg-slate-900/90 backdrop-blur-md p-1.5 rounded border border-slate-700/60 flex items-center gap-2 z-10">
         <button
-          onClick={() => setIsDrawingTransect(!isDrawingTransect)}
+          onClick={toggleTransectDrawing}
           className={`px-3 py-1.5 text-xs font-mono rounded flex items-center gap-1.5 transition-colors ${
             isDrawingTransect
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50'

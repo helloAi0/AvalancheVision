@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     FRONTEND_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     API_KEY: str = ""
-    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_URL: str = ""
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""
 

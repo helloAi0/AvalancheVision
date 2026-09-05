@@ -37,11 +37,11 @@ const CursorTracker: React.FC = () => {
     <div className="map-hud-overlay">
       <div className="hud-item">
         <span>LAT:</span>
-        <span className="hud-val">{coords.lat.toFixed(5)}°N</span>
+        <span className="hud-val">{coords.lat.toFixed(5)}N</span>
       </div>
       <div className="hud-item">
         <span>LON:</span>
-        <span className="hud-val">{coords.lng.toFixed(5)}°E</span>
+        <span className="hud-val">{coords.lng.toFixed(5)}E</span>
       </div>
       <div className="hud-item">
         <span>CRS:</span>
@@ -75,6 +75,18 @@ const MapBoundsFitter: React.FC<{ geoJsonData: DetectionGeoJSON | null }> = ({ g
   return null;
 };
 
+const escapeHtml = (value: unknown): string => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 export const ScientificMap: React.FC<ScientificMapProps> = ({
   geoJsonData,
   selectedFeature,
@@ -87,7 +99,7 @@ export const ScientificMap: React.FC<ScientificMapProps> = ({
   rasterBounds,
   rasterOpacity = 0.7,
 }) => {
-  const defaultCenter: [number, number] = [46.80, 9.83]; // Davos Flüela Pass, Switzerland
+  const defaultCenter: [number, number] = [46.80, 9.83]; // Davos Fluela Pass, Switzerland
   const geoJsonRef = useRef<L.GeoJSON | null>(null);
 
   // Style function for detection polygons
@@ -126,14 +138,16 @@ export const ScientificMap: React.FC<ScientificMapProps> = ({
 
   const onEachFeature = (feature: any, layer: L.Layer) => {
     const props = feature.properties || {};
+    const riskLevel = String(props.risk_level || 'High');
+    const confidence = toNumber(props.confidence_score) * 100;
     const tooltipContent = `
       <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 4px;">
-        <strong style="color: #22d3ee;">${props.detection_id || 'DETECTION'}</strong><br/>
-        <span>Risk: <b style="color: ${props.risk_level === 'Very High' ? '#f87171' : '#fbbf24'};">${props.risk_level || 'High'}</b></span><br/>
-        <span>Confidence: <b>${((props.confidence_score || 0) * 100).toFixed(1)}%</b></span><br/>
-        <span>Area: <b>${props.area_ha || 0} ha</b></span><br/>
-        <span>Slope: <b>${props.slope_mean_deg || 0}° (${props.aspect_cardinal || 'N'})</b></span><br/>
-        <span>Elevation: <b>${props.elevation_mean_m || 0} m</b></span>
+        <strong style="color: #22d3ee;">${escapeHtml(props.detection_id || 'DETECTION')}</strong><br/>
+        <span>Risk: <b style="color: ${riskLevel === 'Very High' ? '#f87171' : '#fbbf24'};">${escapeHtml(riskLevel)}</b></span><br/>
+        <span>Confidence: <b>${confidence.toFixed(1)}%</b></span><br/>
+        <span>Area: <b>${toNumber(props.area_ha).toFixed(3)} ha</b></span><br/>
+        <span>Slope: <b>${toNumber(props.slope_mean_deg).toFixed(1)} (${escapeHtml(props.aspect_cardinal || 'N')})</b></span><br/>
+        <span>Elevation: <b>${toNumber(props.elevation_mean_m).toFixed(0)} m</b></span>
       </div>
     `;
 
@@ -162,7 +176,7 @@ export const ScientificMap: React.FC<ScientificMapProps> = ({
   // AOI Davos Bounding Box
   const aoiPolygonGeoJson: any = {
     type: 'Feature',
-    properties: { name: 'Davos Flüela Pass AOI' },
+    properties: { name: 'Davos Fluela Pass AOI' },
     geometry: {
       type: 'Polygon',
       coordinates: [[
