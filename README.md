@@ -2,7 +2,7 @@
 
 # AvalancheVision
 
-**[🔴 Live Demo / App Link](https://your-live-link-here.com)**
+**[🔴 Live Demo / App Link](http://localhost:8085)**
 
 **Physics-informed, multimodal satellite avalanche debris detection and mapping platform**
 
