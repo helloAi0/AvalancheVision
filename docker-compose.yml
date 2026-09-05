@@ -1,0 +1,86 @@
+services:
+  spatial-db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-avalanchevision_db}
+      POSTGRES_USER: ${POSTGRES_USER:-avalanche}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - ./database/init_schema.sql:/docker-entrypoint-initdb.d/001_init_schema.sql:ro
+      - postgis_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      USE_SQLITE: "false"
+      POSTGRES_HOST: spatial-db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-avalanchevision_db}
+      POSTGRES_USER: ${POSTGRES_USER:-avalanche}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      API_KEY: ${API_KEY:-}
+      FRONTEND_ORIGINS: http://localhost:8080
+    depends_on:
+      spatial-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["celery", "-A", "backend.tasks.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment:
+      USE_SQLITE: "false"
+      POSTGRES_HOST: spatial-db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-avalanchevision_db}
+      POSTGRES_USER: ${POSTGRES_USER:-avalanche}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      FRONTEND_ORIGINS: http://localhost:8080
+    depends_on:
+      spatial-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgis_data:
+  redis_data:
