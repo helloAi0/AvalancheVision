@@ -1,21 +1,21 @@
 """Controlled metadata endpoints for processed raster artifacts."""
 
+from io import BytesIO
 from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
 import rasterio
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from rasterio.enums import Resampling
-from rasterio.windows import from_bounds
-from rasterio.warp import transform_bounds
 from PIL import Image
-from io import BytesIO
+from rasterio.enums import Resampling
+from rasterio.warp import transform_bounds
+from rasterio.windows import from_bounds
 
 from backend.core.config import settings
+from backend.core.security import require_api_key
 from backend.schemas.raster import RasterBandMetadata, RasterMetadata
 from geospatial.cog import validate_cog
-from backend.core.security import require_api_key
 
 router = APIRouter(prefix="/rasters", tags=["Raster Data"])
 
@@ -79,6 +79,29 @@ def _metadata(raster_id: str, entry: Dict[str, str], path: Path) -> RasterMetada
         )
 
 
+def _parse_requested_bounds(
+    bbox: Optional[str],
+    min_lon: Optional[float],
+    min_lat: Optional[float],
+    max_lon: Optional[float],
+    max_lat: Optional[float],
+) -> list[float]:
+    if bbox:
+        bounds = [float(value.strip()) for value in bbox.split(",")]
+    elif None not in (min_lon, min_lat, max_lon, max_lat):
+        bounds = [float(min_lon), float(min_lat), float(max_lon), float(max_lat)]
+    else:
+        raise ValueError("bbox or min/max coordinate parameters are required")
+
+    if len(bounds) != 4 or bounds[0] >= bounds[2] or bounds[1] >= bounds[3]:
+        raise ValueError("invalid bounds")
+    return bounds
+
+
+def _looks_like_wgs84(bounds: list[float]) -> bool:
+    return -180.0 <= bounds[0] <= 180.0 and -90.0 <= bounds[1] <= 90.0 and -180.0 <= bounds[2] <= 180.0 and -90.0 <= bounds[3] <= 90.0
+
+
 @router.get("", response_model=list[RasterMetadata])
 def list_rasters() -> list[RasterMetadata]:
     """List metadata for approved raster artifacts that currently exist."""
@@ -108,7 +131,11 @@ def get_raster_metadata(raster_id: str) -> RasterMetadata:
 @router.get("/window/{raster_id}", dependencies=[Depends(require_api_key)])
 def get_raster_window(
     raster_id: str,
-    bbox: str = Query(..., description="WGS84 or source-CRS bounds: left,bottom,right,top"),
+    bbox: Optional[str] = Query(default=None, description="Bounds as left,bottom,right,top in WGS84 or source CRS"),
+    min_lon: Optional[float] = Query(default=None, description="Minimum longitude when bbox is not supplied"),
+    min_lat: Optional[float] = Query(default=None, description="Minimum latitude when bbox is not supplied"),
+    max_lon: Optional[float] = Query(default=None, description="Maximum longitude when bbox is not supplied"),
+    max_lat: Optional[float] = Query(default=None, description="Maximum latitude when bbox is not supplied"),
     width: int = Query(default=512, ge=32, le=2048),
     height: int = Query(default=512, ge=32, le=2048),
 ) -> Response:
@@ -120,11 +147,12 @@ def get_raster_window(
     if not path.is_file():
         raise HTTPException(status_code=404, detail=f"Raster '{raster_id}' is currently unavailable.")
     try:
-        bounds = [float(value.strip()) for value in bbox.split(",")]
-        if len(bounds) != 4 or bounds[0] >= bounds[2] or bounds[1] >= bounds[3]:
-            raise ValueError
+        requested_bounds = _parse_requested_bounds(bbox, min_lon, min_lat, max_lon, max_lat)
         with rasterio.open(path) as dataset:
-            window = from_bounds(*bounds, transform=dataset.transform)
+            source_bounds = requested_bounds
+            if dataset.crs and dataset.crs.to_epsg() != 4326 and _looks_like_wgs84(requested_bounds):
+                source_bounds = list(transform_bounds("EPSG:4326", dataset.crs, *requested_bounds, densify_pts=21))
+            window = from_bounds(*source_bounds, transform=dataset.transform)
             values = dataset.read(
                 1,
                 window=window,
